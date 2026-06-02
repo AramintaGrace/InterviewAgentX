@@ -68,6 +68,7 @@ class MilvusService:
             data = [{
                 "id": entity_id,
                 "answer_vector": answer_vector,
+                "question_sparse_vector": question_sparse_vector or {},
                 "category_id": category_id,
                 "tags": tags or [],
                 "difficulty": difficulty,
@@ -75,8 +76,6 @@ class MilvusService:
                 "is_deleted": False,
                 "created_at": int(time.time() * 1000),
             }]
-            if question_sparse_vector:
-                data[0]["question_sparse_vector"] = question_sparse_vector
 
             self.collection.insert(data)
             logger.info(f"Inserted vector for entity {entity_id}")

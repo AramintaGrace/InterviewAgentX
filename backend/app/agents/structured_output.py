@@ -26,12 +26,19 @@ def parse_json_response(response_content: str) -> Dict[str, Any]:
     if json_match:
         content = json_match.group(1).strip()
 
-    # Try to find JSON object boundaries
-    if not content.startswith("{"):
-        start = content.find("{")
-        end = content.rfind("}")
-        if start != -1 and end != -1:
-            content = content[start:end + 1]
+    # Try to find JSON boundaries (object or array)
+    starts_with_brace = content.startswith("{") or content.startswith("[")
+    if not starts_with_brace:
+        obj_start = content.find("{")
+        arr_start = content.find("[")
+        if arr_start != -1 and (arr_start < obj_start or obj_start == -1):
+            start, end_char = arr_start, "]"
+        else:
+            start, end_char = obj_start, "}"
+        if start != -1:
+            end = content.rfind(end_char)
+            if end != -1:
+                content = content[start:end + 1]
 
     try:
         return json.loads(content)

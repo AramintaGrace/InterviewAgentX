@@ -45,7 +45,7 @@ const routes: RouteRecordRaw[] = [
     path: '/knowledge-base',
     name: 'KnowledgeBase',
     component: () => import('@/views/KnowledgeBaseView.vue'),
-    meta: { title: '知识库', icon: 'book' },
+    meta: { title: '知识库' },
   },
   {
     path: '/knowledge-base/create',
@@ -59,6 +59,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/KnowledgeBaseEditView.vue'),
     meta: { title: '编辑问答' },
     props: true,
+  },
+  {
+    path: '/knowledge-base/categories',
+    name: 'CategoryManagement',
+    component: () => import('@/views/CategoryManagementView.vue'),
+    meta: { title: '分类管理' },
   },
   // Records
   {

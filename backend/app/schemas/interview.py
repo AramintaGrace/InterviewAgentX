@@ -33,11 +33,21 @@ class InterviewSessionResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class KBSourceConfig(BaseModel):
+    """单个分类的题目配置。"""
+    category_id: Optional[UUID] = None  # None = 不限分类
+    count: int = Field(default=2, ge=0, le=20)
+
+
 class QuestionGenerateRequest(BaseModel):
     source: Literal["resume", "knowledge_base", "mixed"] = "resume"
     count: int = Field(default=5, ge=1, le=20)
-    category_id: Optional[UUID] = None  # For knowledge_base source
-    difficulty: Optional[Literal["easy", "medium", "hard"]] = None
+    # KB/mixed 模式：按分类指定题目数，为空则从全部分类随机
+    kb_configs: List[KBSourceConfig] = Field(default_factory=list)
+    # mixed 模式：resume 占比（0-100），如 60 表示 60% resume + 40% KB
+    resume_ratio: int = Field(default=60, ge=0, le=100)
+    # 题目池：这些题库条目的 ID 保证出现在面试题中（已向量化的 KB 条目）
+    pool_ids: List[UUID] = Field(default_factory=list)
 
 
 class QuestionResponse(BaseModel):

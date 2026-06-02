@@ -1,9 +1,10 @@
 """Question model."""
 
 import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import ForeignKey, SmallInteger, String, Text
+from sqlalchemy import DateTime, ForeignKey, SmallInteger, String, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,7 +31,11 @@ class Question(Base, UUIDMixin, SoftDeleteMixin):
     ai_reference_answer: Mapped[Optional[str]] = mapped_column(Text)
     question_order: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
-    created_at: Mapped[str] = mapped_column(Text)  # Handled by DB default
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=text("now()"),
+        nullable=False,
+    )
 
     interview_session: Mapped["InterviewSession"] = relationship(
         "InterviewSession", back_populates="questions"

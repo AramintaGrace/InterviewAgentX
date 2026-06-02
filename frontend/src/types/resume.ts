@@ -1,35 +1,39 @@
+// 注意：后端 API 返回 snake_case 字段名，前端类型与之保持一致
+
 export interface Candidate {
   id: string
   name: string
   email?: string
   phone?: string
-  currentRole?: string
-  yearsOfExp?: number
+  current_role?: string
+  years_of_exp?: number
   notes?: string
-  createdAt: string
+  created_at: string
 }
 
 export interface ResumeUploadResponse {
   id: string
-  fileName: string
-  fileSizeBytes: number
-  mimeType: string
-  ocrStatus: string
-  createdAt: string
+  file_name: string
+  file_size_bytes: number
+  mime_type: string
+  ocr_status: string
+  ocr_error_msg?: string
+  ocr_raw_text?: string
+  created_at: string
 }
 
 export interface ResumeInfo {
   id: string
-  candidateId?: string
-  fileName: string
-  fileSizeBytes: number
-  mimeType: string
-  ocrStatus: string
-  ocrRawText?: string
-  ocrErrorMsg?: string
-  parsedData?: ParsedResumeData
-  createdAt: string
-  updatedAt: string
+  candidate_id?: string
+  file_name: string
+  file_size_bytes: number
+  mime_type: string
+  ocr_status: string
+  ocr_raw_text?: string
+  ocr_error_msg?: string
+  parsed_data?: ParsedResumeData
+  created_at: string
+  updated_at: string
 }
 
 export interface ParsedResumeData {
@@ -58,28 +62,28 @@ export interface WorkExperience {
 export interface Project {
   name: string
   description: string
-  techStack: string[]
+  tech_stack: string[]
 }
 
 export interface ResumeAnalysis {
   id: string
-  resumeId: string
-  agentModel: string
-  analysisJson: ResumeAnalysisData
-  tokensUsed?: number
-  processingMs?: number
-  createdAt: string
+  resume_id: string
+  agent_model: string
+  analysis_json: ResumeAnalysisData
+  tokens_used?: number
+  processing_ms?: number
+  created_at: string
 }
 
 export interface ResumeAnalysisData {
-  overallAssessment: string
+  overall_assessment: string
   strengths: string[]
   weaknesses: string[]
-  skillMatch: Record<string, number>
-  experienceRelevanceScore: number
-  projectHighlights: Array<{ project: string; depthAnalysis: string }>
-  suggestedQuestions: string[]
-  redFlags: string[]
-  tokensUsed: number
-  processingMs: number
+  skill_match: Record<string, number>
+  experience_relevance_score: number
+  project_highlights: Array<{ project: string; depth_analysis: string }>
+  suggested_questions: string[]
+  red_flags: string[]
+  tokens_used: number
+  processing_ms: number
 }

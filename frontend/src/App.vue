@@ -1,6 +1,5 @@
 <template>
   <div id="app-container">
-    <AppHeader />
     <div class="app-body">
       <AppSidebar />
       <main class="app-main">
@@ -11,7 +10,6 @@
 </template>
 
 <script setup lang="ts">
-import AppHeader from '@/components/layout/AppHeader.vue'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 </script>
 
@@ -38,6 +36,7 @@ body {
 .app-body {
   display: flex;
   flex: 1;
+  min-height: 100vh;
 }
 
 .app-main {

@@ -1,18 +1,28 @@
 """Application configuration via Pydantic Settings."""
 
+import os
 from functools import lru_cache
+from pathlib import Path
 from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# 查找 .env 文件：优先项目根目录，其次当前目录
+_ENV_PATH = Path(__file__).resolve().parent.parent.parent / ".env"  # backend/.env
+if not _ENV_PATH.exists():
+    _ENV_PATH = Path.cwd() / ".env"
+if not _ENV_PATH.exists():
+    _ENV_PATH = None  # 让 pydantic-settings 使用默认行为
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(_ENV_PATH) if _ENV_PATH else ".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",
     )
 
     # ---- Application ----

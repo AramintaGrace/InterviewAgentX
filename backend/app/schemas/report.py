@@ -24,6 +24,8 @@ class InterviewRecordResponse(BaseModel):
     candidate_id: UUID
     candidate_name: str
     candidate_email: Optional[str] = None
+    candidate_phone: Optional[str] = None
+    candidate_role: Optional[str] = None
     resume_id: Optional[UUID] = None
     session_id: UUID
     interview_date: datetime

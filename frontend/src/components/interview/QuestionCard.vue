@@ -1,19 +1,19 @@
 <template>
   <div class="question-card">
     <div class="question-header">
-      <span class="question-number">第 {{ question.questionOrder }} 题</span>
-      <span class="question-badge" :class="question.sourceType">
+      <span class="question-number">第 {{ question.question_order }} 题</span>
+      <span class="question-badge" :class="question.source_type">
         {{ sourceLabel }}
       </span>
     </div>
-    <p class="question-text">{{ question.text }}</p>
+    <p class="question-text">{{ question.question_text }}</p>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 
-const props = defineProps<{ question: { text: string; sourceType: string; questionOrder: number } }>()
+const props = defineProps<{ question: { question_text: string; source_type: string; question_order: number } }>()
 
 const sourceLabel = computed(() => {
   const map: Record<string, string> = {
@@ -21,7 +21,7 @@ const sourceLabel = computed(() => {
     resume_project: '简历项目',
     knowledge_base: '知识库',
   }
-  return map[props.question.sourceType] || props.question.sourceType
+  return map[props.question.source_type] || props.question.source_type
 })
 </script>
 

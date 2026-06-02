@@ -43,11 +43,16 @@ export const useInterviewStore = defineStore('interview', () => {
     loading.value = true
     error.value = null
     try {
-      const response = await interviewsApi.create(data)
+      const response = await interviewsApi.create({
+        candidate_id: data.candidateId,
+        resume_id: data.resumeId,
+        question_source: data.questionSource,
+        total_questions: data.totalQuestions,
+      })
       currentSession.value = response.data
       return response.data
     } catch (e: any) {
-      error.value = e.response?.data?.detail || '创建面试失败'
+      error.value = e.message || '创建面试失败'
       throw e
     } finally {
       loading.value = false
@@ -60,7 +65,7 @@ export const useInterviewStore = defineStore('interview', () => {
       const response = await interviewsApi.start(sessionId)
       currentSession.value = response.data
     } catch (e: any) {
-      error.value = e.response?.data?.detail || '启动面试失败'
+      error.value = e.message ||'启动面试失败'
     } finally {
       loading.value = false
     }
@@ -83,13 +88,13 @@ export const useInterviewStore = defineStore('interview', () => {
     loading.value = true
     try {
       const response = await interviewsApi.submitAnswer(sessionId, {
-        questionId,
-        transcriptText,
+        question_id: questionId,
+        transcript_text: transcriptText,
       })
       answers.value.push(response.data)
       return response.data
     } catch (e: any) {
-      error.value = e.response?.data?.detail || '提交答案失败'
+      error.value = e.message || '提交答案失败'
       throw e
     } finally {
       loading.value = false

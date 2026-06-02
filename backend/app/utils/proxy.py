@@ -6,16 +6,12 @@ from typing import Optional
 import httpx
 
 
-def get_proxy_config() -> dict:
-    """Read proxy environment variables and return httpx-compatible mapping."""
-    proxies = {}
-    http_proxy = os.environ.get("HTTP_PROXY")
-    https_proxy = os.environ.get("HTTPS_PROXY")
-    if http_proxy:
-        proxies["http://"] = http_proxy
-    if https_proxy:
-        proxies["https://"] = https_proxy
-    return proxies
+def get_proxy_url() -> Optional[str]:
+    """Read proxy environment variables.
+
+    Returns the HTTPS proxy if set, otherwise the HTTP proxy, or None.
+    """
+    return os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY") or None
 
 
 def create_http_client(
@@ -31,13 +27,12 @@ def create_http_client(
     Returns:
         Configured httpx.AsyncClient instance.
     """
-    proxies = get_proxy_config()
-    has_proxy = any(proxies.values())
+    proxy_url = get_proxy_url()
 
-    if proxy_required and not has_proxy:
+    if proxy_required and not proxy_url:
         raise RuntimeError("Proxy is required but HTTP_PROXY/HTTPS_PROXY are not set")
 
     return httpx.AsyncClient(
-        proxies=proxies if has_proxy else None,
+        proxy=proxy_url,
         timeout=httpx.Timeout(timeout_seconds),
     )

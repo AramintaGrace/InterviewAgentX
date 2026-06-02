@@ -35,6 +35,8 @@ class ResumeUploadResponse(BaseModel):
     file_size_bytes: int
     mime_type: str
     ocr_status: str
+    ocr_error_msg: Optional[str] = None
+    ocr_raw_text: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

@@ -74,6 +74,16 @@ class ResumeService:
             parsed = await self.ocr.parse_resume_info(ocr_text)
             resume.parsed_data = parsed
 
+            # 如果没有指定候选人且 OCR 解析出了姓名，自动创建候选人
+            if not candidate_id and parsed and parsed.get("name"):
+                candidate = await self._find_or_create_candidate(
+                    name=parsed["name"],
+                    email=parsed.get("email"),
+                    phone=parsed.get("phone"),
+                )
+                resume.candidate_id = candidate.id
+                logger.info(f"Auto-created candidate: {candidate.name} ({candidate.id})")
+
             await self.db.commit()
         except Exception as e:
             logger.error(f"OCR processing failed: {e}")
@@ -83,6 +93,38 @@ class ResumeService:
 
         await self.db.refresh(resume)
         return resume
+
+    async def _find_or_create_candidate(
+        self, name: str, email: Optional[str], phone: Optional[str]
+    ):
+        """Find existing candidate by email/phone or create a new one."""
+        from sqlalchemy import select, or_
+        from app.models.candidate import Candidate
+
+        # 尝试按邮箱或电话查找已有候选人
+        conditions = []
+        if email:
+            conditions.append(Candidate.email == email)
+        if phone:
+            conditions.append(Candidate.phone == phone)
+
+        if conditions:
+            result = await self.db.execute(
+                select(Candidate).where(
+                    or_(*conditions),
+                    Candidate.is_deleted == False,
+                )
+            )
+            existing = result.scalar_one_or_none()
+            if existing:
+                logger.info(f"Found existing candidate by contact: {existing.name}")
+                return existing
+
+        # 新建候选人
+        candidate = Candidate(name=name, email=email, phone=phone)
+        self.db.add(candidate)
+        await self.db.flush()  # 获取 ID 但不提交（由外层统一 commit）
+        return candidate
 
     async def get_resume(self, resume_id: uuid.UUID) -> Resume:
         from sqlalchemy import select

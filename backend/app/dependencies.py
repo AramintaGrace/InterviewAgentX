@@ -19,16 +19,13 @@ from app.services.stt_service import STTService
 
 # ---- Settings ----
 
-async def get_settings_dep() -> Settings:
+def get_settings_dep() -> Settings:
     return get_settings()
 
 
-# ---- Database ----
-
-async def get_db(
-    session: AsyncSession = Depends(get_db_session),
-) -> AsyncGenerator[AsyncSession, None]:
-    yield session
+# ---- Database (alias for convenience) ----
+# 不要再用 get_db 做二次 async generator 包裹，直接用 get_db_session
+get_db = get_db_session
 
 
 # ---- Services ----
@@ -53,22 +50,22 @@ def get_stt_service(settings: Settings = Depends(get_settings_dep)) -> STTServic
     return STTService(settings)
 
 
-async def get_resume_service(
-    db: AsyncSession = Depends(get_db),
+def get_resume_service(
+    db: AsyncSession = Depends(get_db_session),
     minio_svc: MinioService = Depends(get_minio_service),
     ocr_svc: OcrService = Depends(get_ocr_service),
 ) -> ResumeService:
     return ResumeService(db_session=db, minio_service=minio_svc, ocr_service=ocr_svc)
 
 
-async def get_interview_service(
-    db: AsyncSession = Depends(get_db),
+def get_interview_service(
+    db: AsyncSession = Depends(get_db_session),
 ) -> InterviewService:
     return InterviewService(db_session=db)
 
 
-async def get_kb_service(
-    db: AsyncSession = Depends(get_db),
+def get_kb_service(
+    db: AsyncSession = Depends(get_db_session),
     milvus_svc: MilvusService = Depends(get_milvus_service),
     embedding_svc: EmbeddingService = Depends(get_embedding_service),
 ) -> KnowledgeBaseService:

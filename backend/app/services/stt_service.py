@@ -33,7 +33,7 @@ class STTService:
     async def transcribe_file(self, audio_data: bytes, format: str = "webm") -> str:
         """Transcribe a complete audio file (non-streaming)."""
         try:
-            client = await create_http_client(timeout_seconds=60.0)
+            client = create_http_client(timeout_seconds=60.0)
             try:
                 files = {"file": (f"audio.{format}", audio_data, f"audio/{format}")}
                 data = {"model": self.model}

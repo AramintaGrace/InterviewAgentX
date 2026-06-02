@@ -6,74 +6,95 @@
       @click="toggleRecording"
       :disabled="isProcessing"
     >
-      <span class="record-icon">{{ isRecording ? '⏹' : '🎙️' }}</span>
-      <span class="record-label">{{ buttonLabel }}</span>
+      <span class="record-icon">{{ icon }}</span>
+      <span class="record-label">{{ label }}</span>
     </button>
     <div v-if="isRecording" class="record-timer">{{ formattedTime }}</div>
-    <div v-if="isRecording" class="audio-wave">
-      <span v-for="i in 20" :key="i" class="wave-bar" :style="{ animationDelay: `${i * 0.05}s` }"></span>
-    </div>
+    <div v-if="recorderError" class="recorder-error">{{ recorderError }}</div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from 'vue'
+import { ref, computed, watch } from 'vue'
+import { useAudioRecorder } from '@/composables/useAudioRecorder'
+import { transcribeAudio } from '@/api/stt'
 
-const emit = defineEmits<{ transcript: [text: string] }>()
+const emit = defineEmits<{
+  transcript: [text: string]
+}>()
 
-const isRecording = ref(false)
 const isProcessing = ref(false)
-const elapsedSeconds = ref(0)
-let timerInterval: ReturnType<typeof setInterval> | null = null
+const recorderError = ref('')
+let audioChunks: Blob[] = []
 
-const buttonLabel = computed(() => {
-  if (isProcessing.value) return '处理中...'
+const {
+  isRecording,
+  duration,
+  error,
+  start: startRecorder,
+  stop: stopRecorder,
+} = useAudioRecorder({
+  mimeType: 'audio/webm;codecs=opus',
+  chunkIntervalMs: 1000,
+  onChunk: (chunk: ArrayBuffer) => {
+    audioChunks.push(new Blob([chunk], { type: 'audio/webm' }))
+  },
+})
+
+watch(error, (val) => { if (val) recorderError.value = val })
+
+const formattedTime = computed(() => {
+  const m = Math.floor(duration.value / 60)
+  const s = duration.value % 60
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+})
+
+const icon = computed(() => {
+  if (isProcessing.value) return '⏳'
+  if (isRecording.value) return '⏹'
+  return '🎙️'
+})
+
+const label = computed(() => {
+  if (isProcessing.value) return '转写中...'
   if (isRecording.value) return '停止录音'
   return '开始录音'
 })
 
-const formattedTime = computed(() => {
-  const m = Math.floor(elapsedSeconds.value / 60)
-  const s = elapsedSeconds.value % 60
-  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
-})
-
-function toggleRecording() {
+async function toggleRecording() {
+  recorderError.value = ''
   if (isRecording.value) {
-    stopRecording()
+    await stopAndTranscribe()
   } else {
-    startRecording()
+    audioChunks = []
+    await startRecorder()
   }
 }
 
-function startRecording() {
-  isRecording.value = true
-  elapsedSeconds.value = 0
-  timerInterval = setInterval(() => { elapsedSeconds.value++ }, 1000)
-  // Web Audio API recording logic would go here
-}
+async function stopAndTranscribe() {
+  stopRecorder()
+  if (audioChunks.length === 0) return
 
-function stopRecording() {
-  isRecording.value = false
   isProcessing.value = true
-  if (timerInterval) {
-    clearInterval(timerInterval)
-    timerInterval = null
-  }
-  // Simulate STT result
-  setTimeout(() => {
-    isProcessing.value = false
-    emit('transcript', '这是模拟的语音转文字结果...')
-  }, 1500)
-}
+  const fullBlob = new Blob(audioChunks, { type: 'audio/webm' })
 
-onUnmounted(() => {
-  if (timerInterval) clearInterval(timerInterval)
-})
+  try {
+    const text = await transcribeAudio(fullBlob, `recording-${Date.now()}.webm`)
+    if (text && text.trim()) {
+      emit('transcript', text.trim())
+    } else {
+      recorderError.value = '未识别到语音内容，请重新录制'
+    }
+  } catch (e: any) {
+    recorderError.value = e.message || '语音转写失败，请手动输入文字'
+  } finally {
+    isProcessing.value = false
+  }
+}
 </script>
 
 <style scoped>
-.audio-recorder { display: flex; align-items: center; gap: 16px; padding: 16px 0; }
+.audio-recorder { display: flex; align-items: center; gap: 16px; padding: 16px 0; flex-wrap: wrap; }
 .record-btn {
   display: flex; align-items: center; gap: 8px;
   padding: 12px 24px; border: 2px solid #4a90d9; border-radius: 50px;
@@ -85,8 +106,6 @@ onUnmounted(() => {
 .record-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .record-icon { font-size: 20px; }
 .record-timer { font-size: 16px; font-weight: 600; color: #cf1322; }
-.audio-wave { display: flex; align-items: center; gap: 2px; height: 30px; }
-.wave-bar { width: 3px; height: 10px; background: #4a90d9; border-radius: 1px; animation: wave 0.6s ease-in-out infinite alternate; }
+.recorder-error { width: 100%; font-size: 13px; color: #cf1322; }
 @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
-@keyframes wave { from { height: 5px; } to { height: 20px; } }
 </style>

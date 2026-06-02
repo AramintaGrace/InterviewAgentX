@@ -40,13 +40,15 @@ class KBItem(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
     category_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("kb_categories.id", ondelete="SET NULL")
     )
+    title: Mapped[Optional[str]] = mapped_column(String(300))
     question: Mapped[str] = mapped_column(Text, nullable=False)
     answer: Mapped[str] = mapped_column(Text, nullable=False)
     tags: Mapped[Optional[list]] = mapped_column(ARRAY(Text), default=list)
     difficulty: Mapped[str] = mapped_column(String(20), default="medium")
-    embedding_model: Mapped[str] = mapped_column(String(100), nullable=False, default="text-embedding-3-small")
-    embedding_dim: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1536)
+    embedding_model: Mapped[str] = mapped_column(String(100), nullable=False, default="Qwen/Qwen3-Embedding-8B")
+    embedding_dim: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=4096)
     is_vectorized: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    needs_revectorize: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     category: Mapped[Optional["KBCategory"]] = relationship(

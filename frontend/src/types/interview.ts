@@ -1,89 +1,91 @@
+// 注意：后端 API 返回 snake_case，类型声明保持一致
+
 export type QuestionSource = 'resume' | 'knowledge_base' | 'mixed'
 export type QuestionSourceType = 'resume_experience' | 'resume_project' | 'knowledge_base'
 export type InterviewStatus = 'created' | 'in_progress' | 'paused' | 'completed' | 'cancelled'
 
 export interface InterviewSession {
   id: string
-  candidateId?: string
-  resumeId?: string
-  langgraphThreadId: string
+  candidate_id?: string
+  resume_id?: string
+  langgraph_thread_id: string
   status: InterviewStatus
-  questionSource?: QuestionSource
-  totalQuestions: number
-  completedQuestions: number
-  totalScore?: number
-  startedAt?: string
-  endedAt?: string
-  createdAt: string
-  updatedAt: string
+  question_source?: QuestionSource
+  total_questions: number
+  completed_questions: number
+  total_score?: number
+  started_at?: string
+  ended_at?: string
+  created_at: string
+  updated_at: string
 }
 
 export interface InterviewSessionCreate {
-  candidateId: string
-  resumeId: string
-  questionSource: QuestionSource
-  totalQuestions: number
+  candidate_id: string
+  resume_id: string
+  question_source: QuestionSource
+  total_questions: number
 }
 
 export interface GeneratedQuestion {
   id: string
-  interviewSessionId: string
-  sourceType: QuestionSourceType
-  sourceKbItemId?: string
-  sourceResumeContext?: string
-  questionText: string
-  aiReferenceAnswer?: string
-  questionOrder: number
+  interview_session_id: string
+  source_type: QuestionSourceType
+  source_kb_item_id?: string
+  source_resume_context?: string
+  question_text: string
+  ai_reference_answer?: string
+  question_order: number
   status: string
-  createdAt: string
+  created_at: string
 }
 
 export interface AnswerSubmit {
-  questionId: string
-  transcriptText: string
-  audioMinioKey?: string
-  audioDurationSec?: number
+  question_id: string
+  transcript_text: string
+  audio_minio_key?: string
+  audio_duration_sec?: number
 }
 
 export interface Answer {
   id: string
-  questionId: string
-  transcriptText: string
-  audioMinioKey?: string
-  audioDurationSec?: number
-  createdAt: string
+  question_id: string
+  transcript_text: string
+  audio_minio_key?: string
+  audio_duration_sec?: number
+  created_at: string
 }
 
 export interface AnswerAnalysis {
   id: string
-  answerId: string
-  questionId: string
-  evalMode: 'rag_hybrid' | 'llm_judge'
-  analysisJson: AnswerAnalysisData
-  agentModel: string
-  tokensUsed?: number
-  processingMs?: number
-  createdAt: string
+  answer_id: string
+  question_id: string
+  eval_mode: 'rag_hybrid' | 'llm_judge'
+  analysis_json: AnswerAnalysisData
+  agent_model: string
+  tokens_used?: number
+  processing_ms?: number
+  created_at: string
 }
 
 export interface AnswerAnalysisData {
-  overallScore: number
+  overall_score: number
   assessment: string
   strengths: string[]
-  areasForImprovement: string[]
+  areas_for_improvement: string[]
   // LLM-as-a-Judge
-  accuracyScore?: number
-  accuracyReasoning?: string
-  completenessScore?: number
-  completenessReasoning?: string
-  clarityScore?: number
-  clarityReasoning?: string
-  technicalDepthScore?: number
-  technicalDepthReasoning?: string
-  authenticityFlag?: string
+  accuracy_score?: number
+  accuracy_reasoning?: string
+  completeness_score?: number
+  completeness_reasoning?: string
+  clarity_score?: number
+  clarity_reasoning?: string
+  technical_depth_score?: number
+  technical_depth_reasoning?: string
+  authenticity_flag?: string
   // RAG hybrid
-  vectorSimilarity?: number
-  coveredPoints?: string[]
-  missingPoints?: string[]
-  retrievedChunks?: Array<{ id: string; similarity: number; text: string }>
+  vector_similarity?: number
+  covered_points?: string[]
+  missing_points?: string[]
+  retrieved_chunks?: Array<{ id: string; similarity: number; text: string }>
 }

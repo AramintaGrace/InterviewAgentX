@@ -15,7 +15,18 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
       const response = await knowledgeBaseApi.listCategories()
       categories.value = response.data
     } catch (e: any) {
-      error.value = '加载分类失败'
+      error.value = e.message || '加载分类失败'
+    }
+  }
+
+  async function createCategory(name: string, parentId?: string) {
+    try {
+      const res = await knowledgeBaseApi.createCategory({ name, parent_id: parentId })
+      categories.value.push(res.data)
+      return res.data
+    } catch (e: any) {
+      error.value = e.message || '创建分类失败'
+      throw e
     }
   }
 
@@ -24,12 +35,19 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
     difficulty?: string; page?: number; pageSize?: number
   }) {
     loading.value = true
+    error.value = null
     try {
       const response = await knowledgeBaseApi.listItems(params)
-      items.value = response.data.items
-      total.value = response.data.total
+      const data = response.data as any
+      if (data.items) {
+        items.value = data.items
+        total.value = data.total
+      } else {
+        items.value = Array.isArray(data) ? data : []
+        total.value = items.value.length
+      }
     } catch (e: any) {
-      error.value = '加载知识库失败'
+      error.value = e.message || '加载知识库失败'
     } finally {
       loading.value = false
     }
@@ -37,12 +55,14 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
 
   async function createItem(data: KBItemCreate) {
     loading.value = true
+    error.value = null
     try {
       const response = await knowledgeBaseApi.createItem(data)
       items.value.unshift(response.data)
+      total.value++
       return response.data
     } catch (e: any) {
-      error.value = e.response?.data?.detail || '创建失败'
+      error.value = e.message || '创建失败'
       throw e
     } finally {
       loading.value = false
@@ -51,13 +71,14 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
 
   async function updateItem(id: string, data: KBItemUpdate) {
     loading.value = true
+    error.value = null
     try {
       const response = await knowledgeBaseApi.updateItem(id, data)
       const idx = items.value.findIndex(i => i.id === id)
       if (idx !== -1) items.value[idx] = response.data
       return response.data
     } catch (e: any) {
-      error.value = e.response?.data?.detail || '更新失败'
+      error.value = e.message || '更新失败'
       throw e
     } finally {
       loading.value = false
@@ -65,11 +86,13 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
   }
 
   async function deleteItem(id: string) {
+    error.value = null
     try {
       await knowledgeBaseApi.deleteItem(id)
       items.value = items.value.filter(i => i.id !== id)
+      total.value--
     } catch (e: any) {
-      error.value = e.response?.data?.detail || '删除失败'
+      error.value = e.message || '删除失败'
       throw e
     }
   }
@@ -83,16 +106,8 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
   }
 
   return {
-    categories,
-    items,
-    total,
-    loading,
-    error,
-    loadCategories,
-    loadItems,
-    createItem,
-    updateItem,
-    deleteItem,
-    reset,
+    categories, items, total, loading, error,
+    loadCategories, createCategory,
+    loadItems, createItem, updateItem, deleteItem, reset,
   }
 })

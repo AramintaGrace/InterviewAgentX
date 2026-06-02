@@ -68,11 +68,12 @@ class MinioService:
 
     async def get_presigned_url(self, bucket: str, object_key: str, expires_seconds: int = 3600) -> str:
         """Generate a presigned URL for downloading a file."""
+        from datetime import timedelta
         try:
             url = self.client.presigned_get_object(
                 bucket_name=bucket,
                 object_name=object_key,
-                expires=expires_seconds,
+                expires=timedelta(seconds=expires_seconds),
             )
             return url
         except S3Error as e:

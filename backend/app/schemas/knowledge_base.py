@@ -35,6 +35,7 @@ class KBCategoryResponse(BaseModel):
 
 class KBItemCreate(BaseModel):
     category_id: Optional[UUID] = None
+    title: Optional[str] = Field(None, max_length=300)
     question: str = Field(..., min_length=1)
     answer: str = Field(..., min_length=1)
     tags: List[str] = Field(default_factory=list)
@@ -43,6 +44,7 @@ class KBItemCreate(BaseModel):
 
 class KBItemUpdate(BaseModel):
     category_id: Optional[UUID] = None
+    title: Optional[str] = Field(None, max_length=300)
     question: Optional[str] = None
     answer: Optional[str] = None
     tags: Optional[List[str]] = None
@@ -52,6 +54,7 @@ class KBItemUpdate(BaseModel):
 class KBItemResponse(BaseModel):
     id: UUID
     category_id: Optional[UUID] = None
+    title: Optional[str] = None
     question: str
     answer: str
     tags: Optional[List[str]] = None
@@ -59,8 +62,15 @@ class KBItemResponse(BaseModel):
     embedding_model: str
     embedding_dim: int
     is_vectorized: bool
+    needs_revectorize: bool = False
     version: int
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class BatchOperationRequest(BaseModel):
+    item_ids: List[UUID] = Field(..., min_length=1)
+    category_id: Optional[UUID] = None  # for batch update category
+

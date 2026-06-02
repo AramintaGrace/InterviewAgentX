@@ -1,9 +1,10 @@
 """Resume and ResumeAnalysis models."""
 
 import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import BigInteger, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -47,6 +48,10 @@ class ResumeAnalysis(Base, UUIDMixin, SoftDeleteMixin):
     analysis_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
     tokens_used: Mapped[Optional[int]] = mapped_column(Integer)
     processing_ms: Mapped[Optional[int]] = mapped_column(Integer)
-    created_at: Mapped[str] = mapped_column(Text)  # Handled by DB default
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=text("now()"),
+        nullable=False,
+    )
 
     resume: Mapped["Resume"] = relationship("Resume", back_populates="analyses")

@@ -27,22 +27,17 @@ async_session_factory = async_sessionmaker(
 
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
-    """FastAPI dependency that provides an async database session."""
-    async with async_session_factory() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            await session.close()
+    """FastAPI dependency: yields an async database session.
 
-
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """Yield a database session (for use outside FastAPI dependency injection)."""
-    async with async_session_factory() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
+    注意：不能用 async with async_session_factory()，FastAPI 的 Depends 无法正确
+    解析双层 async generator context manager。必须手动 try/finally 管理生命周期。
+    """
+    session = async_session_factory()
+    try:
+        yield session
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
+    finally:
+        await session.close()
