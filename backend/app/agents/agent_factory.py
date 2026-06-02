@@ -1,0 +1,50 @@
+"""Agent factory for creating DeepSeek-powered LangChain agents."""
+
+import logging
+from typing import Optional, Type
+
+from langchain_core.language_models import BaseChatModel
+from langchain_core.tools import BaseTool
+from langchain_openai import ChatOpenAI
+
+from app.config import Settings
+
+logger = logging.getLogger(__name__)
+
+
+def create_deepseek_llm(
+    settings: Settings,
+    temperature: float = 0.3,
+    model: Optional[str] = None,
+    max_tokens: int = 4096,
+) -> ChatOpenAI:
+    """Create a ChatOpenAI instance configured for DeepSeek API.
+
+    DeepSeek API is OpenAI-compatible, so we use ChatOpenAI with
+    DeepSeek's base URL and API key.
+    """
+    return ChatOpenAI(
+        model=model or settings.deepseek_model_chat,
+        api_key=settings.deepseek_api_key,
+        base_url=settings.deepseek_base_url,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+
+
+def create_deepseek_reasoner(
+    settings: Settings,
+    temperature: float = 0.1,
+    max_tokens: int = 8192,
+) -> ChatOpenAI:
+    """Create a ChatOpenAI instance for DeepSeek reasoner model.
+
+    Used for complex analysis tasks (report generation, detailed evaluation).
+    """
+    return ChatOpenAI(
+        model=settings.deepseek_model_reasoner,
+        api_key=settings.deepseek_api_key,
+        base_url=settings.deepseek_base_url,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )

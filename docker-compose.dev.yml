@@ -1,0 +1,26 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      dockerfile: Dockerfile.dev
+    environment:
+      ENVIRONMENT: development
+      LOG_LEVEL: DEBUG
+    volumes:
+      - ./backend/app:/app/app:ro
+      - ./backend/tests:/app/tests:ro
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+      - "5678:5678"  # debugpy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build:
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    ports:
+      - "${FRONTEND_PORT:-8080}:5173"
+    command: npm run dev -- --host 0.0.0.0

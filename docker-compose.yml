@@ -1,0 +1,260 @@
+version: "3.8"
+
+services:
+  # ============================================================
+  # PostgreSQL 17 + pgvector — business data + LangGraph checkpointer
+  # ============================================================
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: iax-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${PG_USER:-iax_user}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-changeme}
+      POSTGRES_DB: ${PG_DB:-interview_agent}
+    ports:
+      - "${PG_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-iax_user} -d ${PG_DB:-interview_agent}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2g
+        reservations:
+          cpus: "0.5"
+          memory: 512m
+    networks:
+      - iax-network
+
+  # ============================================================
+  # etcd — Milvus metadata storage
+  # ============================================================
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.16
+    container_name: iax-etcd
+    restart: unless-stopped
+    environment:
+      ETCD_AUTO_COMPACTION_MODE: revision
+      ETCD_AUTO_COMPACTION_RETENTION: "1000"
+      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
+      ETCD_SNAPSHOT_COUNT: "50000"
+    volumes:
+      - etcd_data:/etcd
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512m
+    networks:
+      - iax-network
+
+  # ============================================================
+  # MinIO — object storage for resumes and audio
+  # ============================================================
+  minio:
+    image: minio/minio:latest
+    container_name: iax-minio
+    restart: unless-stopped
+    command: minio server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:-minioadmin}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
+    networks:
+      - iax-network
+
+  # ============================================================
+  # Milvus Standalone 2.5 — vector database
+  # ============================================================
+  milvus:
+    image: milvusdb/milvus:v2.5.5
+    container_name: iax-milvus
+    restart: unless-stopped
+    command: ["milvus", "run", "standalone"]
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+      MINIO_ACCESS_KEY_ID: ${MINIO_USER:-minioadmin}
+      MINIO_SECRET_ACCESS_KEY: ${MINIO_PASSWORD:-minioadmin}
+      common.security.authorizationEnabled: "false"
+    volumes:
+      - milvus_data:/var/lib/milvus
+    ports:
+      - "${MILVUS_PORT:-19530}:19530"
+      - "${MILVUS_GRPC_PORT:-9091}:9091"
+    depends_on:
+      etcd:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      timeout: 20s
+      start_period: 90s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 6g
+        reservations:
+          cpus: "1.0"
+          memory: 2g
+    networks:
+      - iax-network
+
+  # ============================================================
+  # FastAPI Backend
+  # ============================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: iax-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://${PG_USER:-iax_user}:${PG_PASSWORD:-changeme}@postgres:5432/${PG_DB:-interview_agent}"
+      DATABASE_URL_SYNC: "postgresql+psycopg2://${PG_USER:-iax_user}:${PG_PASSWORD:-changeme}@postgres:5432/${PG_DB:-interview_agent}"
+      MILVUS_HOST: milvus
+      MILVUS_PORT: "19530"
+      MILVUS_COLLECTION: knowledge_base_vectors
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_PASSWORD:-minioadmin}
+      MINIO_BUCKET_RESUMES: resumes
+      MINIO_BUCKET_AUDIO: interview-audio
+      MINIO_SECURE: "false"
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}
+      DEEPSEEK_MODEL_CHAT: ${DEEPSEEK_MODEL_CHAT:-deepseek-chat}
+      DEEPSEEK_MODEL_REASONER: ${DEEPSEEK_MODEL_REASONER:-deepseek-reasoner}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-https://api.siliconflow.cn/v1}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-large-zh-v1.5}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
+      OCR_API_KEY: ${OCR_API_KEY}
+      OCR_API_URL: ${OCR_API_URL}
+      STT_API_KEY: ${STT_API_KEY}
+      STT_PROVIDER: ${STT_PROVIDER:-whisper}
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,postgres,milvus,minio,etcd}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      milvus:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: "3.0"
+          memory: 3g
+        reservations:
+          cpus: "1.0"
+          memory: 1g
+    networks:
+      - iax-network
+
+  # ============================================================
+  # Vue Frontend (Nginx)
+  # ============================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
+        VITE_WS_URL: ${VITE_WS_URL:-ws://localhost:8000}
+    container_name: iax-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256m
+        reservations:
+          cpus: "0.25"
+          memory: 128m
+    networks:
+      - iax-network
+
+  # ============================================================
+  # Milvus Collection Initialization (one-shot)
+  # ============================================================
+  milvus-init:
+    image: python:3.12-slim
+    container_name: iax-milvus-init
+    restart: "no"
+    environment:
+      MILVUS_HOST: milvus
+      MILVUS_PORT: "19530"
+    volumes:
+      - ./scripts/init_milvus.py:/init_milvus.py:ro
+    command: >
+      bash -c "pip install pymilvus && python /init_milvus.py"
+    depends_on:
+      milvus:
+        condition: service_healthy
+    networks:
+      - iax-network
+
+volumes:
+  pgdata:
+  etcd_data:
+  minio_data:
+  milvus_data:
+
+networks:
+  iax-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
