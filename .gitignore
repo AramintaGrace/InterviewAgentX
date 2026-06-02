@@ -1,5 +1,5 @@
 # AI Coding
-*.claude
+.claude/
 prompt.txt
 api/
 
