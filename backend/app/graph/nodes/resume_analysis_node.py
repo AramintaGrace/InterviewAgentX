@@ -1,4 +1,4 @@
-"""Resume Analysis graph node."""
+"""Resume Analysis graph node — delegates to ResumeAnalystAgent in multi-agent mode."""
 
 import logging
 import time
@@ -14,13 +14,15 @@ logger = logging.getLogger(__name__)
 
 
 async def resume_analysis_node(state: InterviewState) -> Dict[str, Any]:
-    """Analyze the candidate's resume using the Resume Analysis Agent.
+    """Analyze the candidate's resume.
+
+    Multi-agent mode: delegates to ResumeAnalystAgent with tool-calling.
+    Single-agent mode: original llm.ainvoke(prompt) pipeline.
 
     Reads OCR text from state, invokes DeepSeek LLM, and returns
     structured analysis as a ResumeAnalysisOutput appended to state.
     """
     settings = get_settings()
-    llm = create_deepseek_llm(settings, temperature=0.3)
 
     resume_ocr = state.get("resume_ocr")
     if not resume_ocr:
@@ -30,10 +32,53 @@ async def resume_analysis_node(state: InterviewState) -> Dict[str, Any]:
             "current_phase": "question_generation",
         }
 
-    resume_text = resume_ocr.get("raw_text", "")
-    parsed = resume_ocr.get("parsed", {})
+    if settings.multi_agent_enabled:
+        return await _multi_agent_analysis(state, settings)
+    else:
+        return await _single_agent_analysis(state, settings)
 
-    # Compact representation: limit text to avoid token overflow
+
+async def _multi_agent_analysis(
+    state: InterviewState, settings
+) -> Dict[str, Any]:
+    """Multi-agent: delegate to ResumeAnalystAgent with tool-calling."""
+    from app.agents.resume_analyst import ResumeAnalystAgent
+    from app.agents.tools import create_resume_analyst_tools
+
+    try:
+        llm = create_deepseek_llm(settings, temperature=0.3)
+        tools = create_resume_analyst_tools(state_provider=lambda: state)
+        agent = ResumeAnalystAgent(
+            llm=llm,
+            tools=tools,
+            max_iterations=settings.agent_max_iterations,
+        )
+
+        result = await agent.execute(state)
+        # Merge agent trace into state
+        trace = result.pop("_agent_trace", None)
+        if trace:
+            result.setdefault("agent_traces", [])
+            result["agent_traces"].append(trace)
+
+        result.setdefault("current_phase", "question_generation")
+        return result
+
+    except Exception as e:
+        logger.error(f"ResumeAnalystAgent failed: {e}", exc_info=True)
+        # Fallback to single-agent mode on error
+        return await _single_agent_analysis(state, settings)
+
+
+async def _single_agent_analysis(
+    state: InterviewState, settings
+) -> Dict[str, Any]:
+    """Original single-agent pipeline: llm.ainvoke(prompt) → parse JSON."""
+    llm = create_deepseek_llm(settings, temperature=0.3)
+
+    resume_ocr = state.get("resume_ocr", {})
+    resume_text = resume_ocr.get("raw_text", "")
+
     prompt = RESUME_ANALYSIS_PROMPT.format(
         resume_text=resume_text[:6000] + ("..." if len(resume_text) > 6000 else ""),
     )
@@ -46,11 +91,13 @@ async def resume_analysis_node(state: InterviewState) -> Dict[str, Any]:
 
         analysis = parse_json_response(content)
         analysis["resume_id"] = resume_ocr.get("resume_id", "")
-        analysis["tokens_used"] = getattr(response, "usage_metadata", {}).get("total_tokens", 0) if hasattr(response, "usage_metadata") else 0
+        analysis["tokens_used"] = (
+            getattr(response, "usage_metadata", {}).get("total_tokens", 0)
+            if hasattr(response, "usage_metadata") else 0
+        )
         analysis["processing_ms"] = elapsed_ms
 
         logger.info(f"Resume analysis completed in {elapsed_ms}ms")
-
         return {
             "resume_analyses": [analysis],
             "current_phase": "question_generation",

@@ -1,11 +1,11 @@
-"""Interview Report Generation graph node."""
+"""Interview Report Generation graph node — delegates to ReportSynthesizerAgent in multi-agent mode."""
 
 import json
 import logging
 import time
 from typing import Any, Dict
 
-from app.agents.agent_factory import create_deepseek_reasoner
+from app.agents.agent_factory import create_deepseek_reasoner, create_deepseek_llm
 from app.agents.prompts.report_generation import REPORT_GENERATION_PROMPT
 from app.agents.structured_output import parse_json_response
 from app.config import get_settings
@@ -17,19 +17,63 @@ logger = logging.getLogger(__name__)
 async def generate_report_node(state: InterviewState) -> Dict[str, Any]:
     """Generate the final interview report from all answer analysis summaries.
 
+    Multi-agent mode: delegates to ReportSynthesizerAgent with tools.
+    Single-agent mode: original llm.ainvoke(prompt) pipeline.
+
     Key design: This node reads structured answer_analyses summaries,
     NOT raw transcripts, avoiding token overflow.
     """
     settings = get_settings()
+
+    if settings.multi_agent_enabled:
+        return await _multi_agent_report(state, settings)
+    else:
+        return await _single_agent_report(state, settings)
+
+
+async def _multi_agent_report(
+    state: InterviewState, settings
+) -> Dict[str, Any]:
+    """Multi-agent: delegate to ReportSynthesizerAgent with DeepSeek Reasoner."""
+    from app.agents.report_synthesizer import ReportSynthesizerAgent
+    from app.agents.tools import create_report_synthesizer_tools
+
+    try:
+        # Use DeepSeek Reasoner for deep analytical synthesis
+        llm = create_deepseek_reasoner(settings, temperature=0.2)
+        tools = create_report_synthesizer_tools(state_provider=lambda: state)
+        agent = ReportSynthesizerAgent(
+            llm=llm,
+            tools=tools,
+            max_iterations=settings.agent_max_iterations,
+        )
+
+        result = await agent.execute(state)
+
+        trace = result.pop("_agent_trace", None)
+        if trace:
+            result.setdefault("agent_traces", [])
+            result["agent_traces"].append(trace)
+
+        result.setdefault("current_phase", "completed")
+        return result
+
+    except Exception as e:
+        logger.error(f"ReportSynthesizerAgent failed: {e}", exc_info=True)
+        return await _single_agent_report(state, settings)
+
+
+async def _single_agent_report(
+    state: InterviewState, settings
+) -> Dict[str, Any]:
+    """Original single-agent pipeline for report generation."""
     llm = create_deepseek_reasoner(settings, temperature=0.2)
 
-    # Build compact summaries from structured data
     resume_ocr = state.get("resume_ocr", {})
     resume_analyses = state.get("resume_analyses", [])
     answer_analyses = state.get("answer_analyses", [])
     questions = state.get("questions", [])
 
-    # Candidate info from parsed OCR
     parsed = resume_ocr.get("parsed", {}) if resume_ocr else {}
     candidate_info = json.dumps({
         "name": parsed.get("name", "未知"),
@@ -37,7 +81,6 @@ async def generate_report_node(state: InterviewState) -> Dict[str, Any]:
         "skills": parsed.get("skills", []),
     }, ensure_ascii=False)
 
-    # Resume analysis summary (compact)
     last_analysis = resume_analyses[-1] if resume_analyses else {}
     resume_summary = json.dumps({
         "overall_assessment": last_analysis.get("overall_assessment", ""),
@@ -46,7 +89,6 @@ async def generate_report_node(state: InterviewState) -> Dict[str, Any]:
         "experience_relevance_score": last_analysis.get("experience_relevance_score", 0),
     }, ensure_ascii=False)
 
-    # Build question review summaries from structured analyses
     question_reviews = []
     for i, analysis in enumerate(answer_analyses):
         q = questions[i] if i < len(questions) else {}
@@ -76,11 +118,13 @@ async def generate_report_node(state: InterviewState) -> Dict[str, Any]:
 
         report = parse_json_response(content)
         report["session_id"] = state.get("session_id", "")
-        report["tokens_used"] = getattr(response, "usage_metadata", {}).get("total_tokens", 0) if hasattr(response, "usage_metadata") else 0
+        report["tokens_used"] = (
+            getattr(response, "usage_metadata", {}).get("total_tokens", 0)
+            if hasattr(response, "usage_metadata") else 0
+        )
         report["processing_ms"] = elapsed_ms
 
         logger.info(f"Interview report generated in {elapsed_ms}ms")
-
         return {
             "interview_report": report,
             "current_phase": "completed",

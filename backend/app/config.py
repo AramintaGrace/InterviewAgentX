@@ -69,6 +69,13 @@ class Settings(BaseSettings):
     stt_base_url: str = "https://api.siliconflow.cn/v1"
     stt_model: str = "FunAudioLLM/SenseVoiceSmall"
 
+    # ---- Multi-Agent Settings ----
+    multi_agent_enabled: bool = False  # Feature flag: enable multi-agent mode
+    agent_max_iterations: int = 5  # Max tool-calling loop iterations per agent
+    agentic_rag_relevance_threshold: float = 0.65  # Min relevance for agentic RAG
+    agentic_rag_max_retries: int = 1  # Max re-retrieval attempts in agentic RAG
+    agentic_rag_top_k: int = 5  # Default top_k for agentic RAG retrieval
+
     # ---- Proxy ----
     http_proxy: Optional[str] = None
     https_proxy: Optional[str] = None

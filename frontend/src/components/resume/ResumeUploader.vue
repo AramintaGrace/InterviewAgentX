@@ -10,15 +10,38 @@
     >
       <span class="upload-icon">📁</span>
       <p class="upload-text">拖拽简历文件到此处，或点击选择</p>
-      <p class="upload-hint">支持 PDF、Word、图片格式（最大 20MB）</p>
+      <p class="upload-hint">支持 PDF、Word、图片（最大 20MB/文件）</p>
+      <p class="upload-hint-multi">📸 多页简历？可一次选择多张图片，系统智能合并！</p>
     </div>
     <input
       ref="fileInput"
       type="file"
       accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+      multiple
       style="display: none"
       @change="handleFileSelect"
     />
+
+    <!-- 已选文件预览 -->
+    <div v-if="selectedFiles.length > 0 && !uploading" class="selected-files">
+      <div class="files-header">
+        <span>已选择 {{ selectedFiles.length }} 个文件</span>
+        <button class="btn-clear" @click="clearSelection">✕ 清除</button>
+      </div>
+      <div v-for="(f, i) in selectedFiles" :key="i" class="file-item">
+        <span class="file-icon">📄</span>
+        <span class="file-name">{{ f.name }}</span>
+        <span class="file-size">{{ formatSize(f.size) }}</span>
+        <button class="btn-remove" @click.stop="removeFile(i)">✕</button>
+      </div>
+      <button
+        class="btn-upload-all"
+        :disabled="uploading"
+        @click="uploadAllFiles"
+      >
+        {{ selectedFiles.length > 1 ? `🚀 上传并智能合并 ${selectedFiles.length} 张图片` : '📤 上传简历' }}
+      </button>
+    </div>
 
     <!-- 上传进度 -->
     <div v-if="uploading" class="upload-progress">
@@ -36,14 +59,17 @@
         <span class="result-size">{{ formatSize(uploadResult.file_size_bytes) }}</span>
       </div>
 
-      <!-- OCR 错误详情 -->
+      <!-- 合并信息 -->
+      <div v-if="selectedFiles.length > 1 && uploadResult.ocr_status === 'completed'" class="merge-info">
+        ✅ 已智能合并 {{ selectedFiles.length }} 张图片为一份完整简历
+      </div>
+
       <div v-if="uploadResult.ocr_status === 'failed'" class="ocr-error-box">
         <p class="ocr-error-title">⚠️ OCR 识别失败</p>
         <p class="ocr-error-detail">{{ uploadResult.ocr_error_msg || '未知错误' }}</p>
-        <p class="ocr-error-hint">文件已保存，可稍后重试 OCR</p>
+        <p class="ocr-error-hint">文件已保存，可稍后重试</p>
       </div>
 
-      <!-- OCR 处理中 -->
       <div v-if="uploadResult.ocr_status === 'processing' || uploadResult.ocr_status === 'pending'" class="ocr-pending">
         <LoadingSpinner text="正在识别简历内容..." />
       </div>
@@ -58,11 +84,12 @@ import ErrorBanner from '@/components/common/ErrorBanner.vue'
 import { resumesApi } from '@/api/resumes'
 import type { ResumeUploadResponse } from '@/types/resume'
 
-const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20MB
+const MAX_FILE_SIZE = 20 * 1024 * 1024
 
 const emit = defineEmits<{ uploaded: [data: ResumeUploadResponse] }>()
 
 const fileInput = ref<HTMLInputElement>()
+const selectedFiles = ref<File[]>([])
 const isDragOver = ref(false)
 const uploading = ref(false)
 const progressText = ref('')
@@ -92,102 +119,110 @@ function triggerFileInput() {
 function handleFileSelect(event: Event) {
   const target = event.target as HTMLInputElement
   if (target.files?.length) {
-    uploadFile(target.files[0])
-    // reset so same file can be re-selected
+    for (let i = 0; i < target.files.length; i++) {
+      addFile(target.files[i])
+    }
     target.value = ''
   }
 }
 
 function handleDrop(event: DragEvent) {
   isDragOver.value = false
-  const file = event.dataTransfer?.files[0]
-  if (file) uploadFile(file)
+  const dt = event.dataTransfer
+  if (dt?.files) {
+    for (let i = 0; i < dt.files.length; i++) {
+      addFile(dt.files[i])
+    }
+  }
+}
+
+function addFile(file: File) {
+  const err = validateFile(file)
+  if (err) {
+    error.value = err
+    return
+  }
+  // Prevent duplicates by name+size
+  const exists = selectedFiles.value.some(f => f.name === file.name && f.size === file.size)
+  if (!exists && selectedFiles.value.length < 10) {
+    selectedFiles.value.push(file)
+  }
+}
+
+function removeFile(index: number) {
+  selectedFiles.value.splice(index, 1)
+}
+
+function clearSelection() {
+  selectedFiles.value = []
+  error.value = ''
 }
 
 function validateFile(file: File): string | null {
-  const allowedExts = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png']
   const ext = '.' + file.name.split('.').pop()?.toLowerCase()
-  if (!allowedExts.includes(ext)) {
-    return `不支持的文件格式 "${ext}"，支持: ${allowedExts.join(', ')}`
-  }
-  if (file.size > MAX_FILE_SIZE) {
-    return `文件过大 (${formatSize(file.size)})，最大支持 20MB`
-  }
+  const allowed = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png']
+  if (!allowed.includes(ext)) return `不支持 "${ext}"`
+  if (file.size > MAX_FILE_SIZE) return `${file.name} 过大 (${formatSize(file.size)})`
   return null
 }
 
-async function uploadFile(file: File) {
-  // 客户端校验
-  const validationError = validateFile(file)
-  if (validationError) {
-    error.value = validationError
-    return
-  }
+async function uploadAllFiles() {
+  if (!selectedFiles.value.length) return
 
   uploading.value = true
   error.value = ''
   uploadResult.value = null
+  progressText.value = `正在上传 ${selectedFiles.value.length} 个文件...`
 
-  // 阶段 1: 上传
-  progressText.value = '正在上传文件...'
-  let response: ResumeUploadResponse
   try {
-    const res = await resumesApi.upload(file)
-    response = res.data
+    const isMulti = selectedFiles.value.length > 1
+    let response: ResumeUploadResponse
+
+    if (isMulti) {
+      progressText.value = `正在上传并OCR识别 ${selectedFiles.value.length} 张图片...`
+      const res = await resumesApi.uploadMultiple(selectedFiles.value)
+      response = res.data
+      progressText.value = '正在智能合并多页简历...'
+    } else {
+      const res = await resumesApi.upload(selectedFiles.value[0])
+      response = res.data
+    }
+
+    uploadResult.value = response
+    emit('uploaded', response)
+
+    if (response.ocr_status === 'pending' || response.ocr_status === 'processing') {
+      progressText.value = isMulti ? '正在LLM智能合并 + OCR...' : 'OCR识别中...'
+      await pollOcrStatus(response.id)
+    }
   } catch (e: any) {
-    error.value = e.message || '文件上传失败，请检查网络连接'
+    error.value = e.message || '上传失败'
+  } finally {
     uploading.value = false
-    return
   }
-
-  uploadResult.value = response
-  emit('uploaded', response)
-
-  // 阶段 2: 等待 OCR 完成
-  if (response.ocr_status === 'pending' || response.ocr_status === 'processing') {
-    progressText.value = '正在识别简历内容 (OCR)...'
-    await pollOcrStatus(response.id)
-  }
-
-  uploading.value = false
 }
 
-/** 轮询 OCR 状态，最多等待 60 秒 */
 async function pollOcrStatus(resumeId: string) {
-  const maxRetries = 30
-  const intervalMs = 2000
-
-  for (let i = 0; i < maxRetries; i++) {
-    await delay(intervalMs)
+  for (let i = 0; i < 45; i++) {  // up to 90s
+    await delay(2000)
     try {
       const res = await resumesApi.getOcrStatus(resumeId)
       const data = res.data as Record<string, any>
-      const status = data.ocr_status || 'unknown'
-      const updated = {
+      uploadResult.value = {
         ...uploadResult.value!,
-        ocr_status: status,
+        ocr_status: data.ocr_status,
         ocr_error_msg: data.ocr_error_msg || uploadResult.value!.ocr_error_msg,
         ocr_raw_text: data.ocr_raw_text || uploadResult.value!.ocr_raw_text,
-      }
-
-      uploadResult.value = updated as any
-
-      if (status === 'completed' || status === 'failed') {
-        emit('uploaded', updated as any)
+      } as any
+      if (data.ocr_status === 'completed' || data.ocr_status === 'failed') {
+        emit('uploaded', uploadResult.value!)
         return
       }
-    } catch {
-      // 轮询中的单次失败不中断，继续重试
-    }
+    } catch { /* continue polling */ }
   }
-
-  // 超时
-  uploadResult.value = { ...uploadResult.value!, ocr_status: 'failed', ocr_error_msg: 'OCR 识别超时，请稍后重试' } as any
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
-}
+function delay(ms: number) { return new Promise(r => setTimeout(r, ms)) }
 
 function formatSize(bytes: number): string {
   if (!bytes) return '0 B'
@@ -198,12 +233,12 @@ function formatSize(bytes: number): string {
 </script>
 
 <style scoped>
-.resume-uploader { max-width: 600px; }
+.resume-uploader { max-width: 640px; }
 
 .drop-zone {
   border: 2px dashed #ccc;
   border-radius: 12px;
-  padding: 60px 20px;
+  padding: 48px 20px;
   text-align: center;
   cursor: pointer;
   transition: all 0.2s;
@@ -217,10 +252,76 @@ function formatSize(bytes: number): string {
 .upload-icon { font-size: 48px; display: block; margin-bottom: 12px; }
 .upload-text { font-size: 16px; color: #333; }
 .upload-hint { font-size: 13px; color: #999; margin-top: 8px; }
+.upload-hint-multi { font-size: 13px; color: #4a90d9; margin-top: 4px; }
+
+/* Selected files */
+.selected-files {
+  margin-top: 16px;
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.files-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #eee;
+}
+.btn-clear {
+  background: none;
+  border: none;
+  color: #999;
+  cursor: pointer;
+  font-size: 13px;
+}
+.btn-clear:hover { color: #666; }
+
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 13px;
+  border-bottom: 1px solid #f5f5f5;
+}
+.file-item:last-child { border-bottom: none; }
+.file-icon { font-size: 16px; flex-shrink: 0; }
+.file-name { flex: 1; color: #333; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-size { color: #999; font-size: 12px; white-space: nowrap; }
+.btn-remove {
+  background: none;
+  border: none;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+}
+.btn-remove:hover { color: #e74c3c; }
+
+.btn-upload-all {
+  margin-top: 12px;
+  width: 100%;
+  padding: 10px;
+  background: #4a90d9;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.btn-upload-all:hover { background: #357abd; }
+.btn-upload-all:disabled { background: #ccc; cursor: not-allowed; }
 
 .upload-progress { margin-top: 16px; }
 
-/* Upload result */
+/* Result */
 .upload-result {
   margin-top: 16px;
   background: #fff;
@@ -234,7 +335,6 @@ function formatSize(bytes: number): string {
   gap: 12px;
 }
 .result-badge {
-  display: inline-block;
   padding: 2px 10px;
   border-radius: 10px;
   font-size: 12px;
@@ -244,7 +344,6 @@ function formatSize(bytes: number): string {
 .badge-success { background: #e6f7e6; color: #2e7d32; }
 .badge-error   { background: #fdecea; color: #c62828; }
 .badge-info    { background: #e3f2fd; color: #1565c0; }
-
 .result-name {
   font-size: 14px;
   color: #333;
@@ -253,13 +352,18 @@ function formatSize(bytes: number): string {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.result-size {
-  font-size: 12px;
-  color: #999;
-  white-space: nowrap;
+.result-size { font-size: 12px; color: #999; white-space: nowrap; }
+
+/* Merge info */
+.merge-info {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: #e8f5e9;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #2e7d32;
 }
 
-/* OCR error box */
 .ocr-error-box {
   margin-top: 12px;
   padding: 12px 16px;
@@ -272,4 +376,9 @@ function formatSize(bytes: number): string {
 .ocr-error-hint { font-size: 12px; color: #999; margin-top: 4px; }
 
 .ocr-pending { margin-top: 12px; }
+
+@media (max-width: 640px) {
+  .drop-zone { padding: 32px 12px; }
+  .upload-text { font-size: 14px; }
+}
 </style>

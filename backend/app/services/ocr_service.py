@@ -101,12 +101,12 @@ class OcrService:
                                 {"type": "image_url", "image_url": {"url": file_url}},
                                 {
                                     "type": "text",
-                                    "text": "Extract all text from this image. Output only the text, nothing else. No explanations.",
+                                    "text": "请逐行提取图片中的所有文字，包括姓名、电话、邮箱、教育经历、工作经验、项目经历、技能信息。不要遗漏任何文字。",
                                 },
                             ],
                         }
                     ],
-                    "max_tokens": 2048,
+                    "max_tokens": 4096,
                     "temperature": 0,
                 }
                 headers = {
@@ -156,7 +156,7 @@ class OcrService:
             pass  # 清理失败不抛异常
 
     def _post_process(self, text: str) -> str:
-        """后处理：去 HTML、去重复行、压缩空行。"""
+        """后处理：去HTML、去连续重复行、压缩空行。"""
         if not text:
             return ""
 
@@ -166,37 +166,27 @@ class OcrService:
         # 2. 处理 Markdown 格式
         text = re.sub(r"!\[.*?\]\(.*?\)", "", text)
         text = re.sub(r"\[([^\]]*)\]\(.*?\)", r"\1", text)
-        text = re.sub(r"\*{1,2}([^*]+)\*{1,2}", r"\1", text)  # bold/italic
-        text = re.sub(r"#{1,6}\s*", "", text)  # headings
-        text = re.sub(r"[-*]\s+", "", text)  # list markers
+        text = re.sub(r"\*{1,2}([^*]+)\*{1,2}", r"\1", text)
+        text = re.sub(r"#{1,6}\s*", "", text)
+        text = re.sub(r"[-*]\s+", "", text)
 
-        # 3. 去重：移除连续重复的行
+        # 3. 去重：只去除连续重复行（保留跨页相同的标题名如"教育背景"）
         lines = text.split("\n")
-        deduped = []
-        seen = set()
-        repeat_count = 0
-        for line in lines:
+        deduped = [lines[0]] if lines else []
+        for line in lines[1:]:
             stripped = line.strip()
-            if not stripped:
-                deduped.append(line)
+            prev_stripped = deduped[-1].strip() if deduped else ""
+            # 只比较完全相同的连续行
+            if stripped == prev_stripped and stripped:
                 continue
-            # 标准化后比较（去标点、去空格）
-            normalized = re.sub(r"[\s\*\-\.\,\:\;\|\(\)\[\]]+", "", stripped)
-            if normalized in seen:
-                repeat_count += 1
-                continue
-            seen.add(normalized)
             deduped.append(line)
-
-        if repeat_count > 0:
-            logger.info(f"OCR post-process: removed {repeat_count} duplicate lines")
 
         text = "\n".join(deduped)
 
         # 4. 压缩连续空行
         text = re.sub(r"\n{3,}", "\n\n", text)
 
-        # 5. 清理行首空白
+        # 5. 清理行首尾空白
         text = "\n".join(line.strip() for line in text.split("\n"))
 
         return text.strip()

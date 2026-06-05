@@ -88,12 +88,25 @@ class InterviewReportOutput(TypedDict):
     processing_ms: int
 
 
+class AgentTraceData(TypedDict):
+    """Per-agent execution trace for audit and debugging."""
+    agent: str
+    decisions: list[str]
+    tool_calls_made: list[str]
+    iterations: int
+    tokens_used: int
+    processing_ms: int
+
+
 class InterviewState(TypedDict):
     """Full interview workflow state persisted via LangGraph checkpointer.
 
     List fields use operator.add reducer for incremental appends.
     Each agent outputs structured JSON, not long text — the report agent
     reads summaries, not raw transcripts.
+
+    Multi-agent fields (orchestrator_decision, agent_traces, etc.) are
+    optional for backward compatibility with existing checkpoints.
     """
 
     # Session identifiers
@@ -126,3 +139,13 @@ class InterviewState(TypedDict):
     # Timestamps
     started_at: str
     completed_at: Optional[str]
+
+    # ---- Multi-Agent fields (backward compatible — all optional) ----
+    orchestrator_decision: Optional[dict]       # Latest routing decision from orchestrator
+    agent_traces: Annotated[list[AgentTraceData], operator.add]  # Per-agent execution audit trail
+    pending_follow_ups: Annotated[list[dict], operator.add]      # Dynamically generated follow-up Qs
+    interview_difficulty: str                   # Dynamic difficulty: "easy" | "medium" | "hard"
+    kb_retrieval_cache: Optional[dict]          # Cache for agentic RAG results per question
+    resilience_context: Optional[dict]          # Error recovery state for graceful degradation
+    kb_configs: Optional[list]                  # KB category distribution configs
+    pool_ids: Optional[list]                    # Must-include KB item IDs (question pool)
