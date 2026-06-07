@@ -18,8 +18,8 @@
       </div>
     </div>
 
-    <!-- LLM Judge / RAG 四维评分（仅 LLM Judge 模式显示） -->
-    <div v-if="analysis.eval_mode === 'llm_judge' && hasDimensions" class="dimensions">
+    <!-- 四维评分：显示维度数据（LLM Judge 模式或降级兜底） -->
+    <div v-if="hasDimensions" class="dimensions">
       <div class="dim-row" v-for="dim in dimensions" :key="dim.key">
         <div class="dim-header">
           <span class="dim-label">{{ dim.label }}</span>
@@ -47,6 +47,11 @@
     <div v-if="data.missing_points?.length" class="detail-section">
       <h4>❌ 遗漏的得分点</h4>
       <ul><li v-for="p in data.missing_points" :key="p">{{ p }}</li></ul>
+    </div>
+
+    <!-- RAG 降级提示：RAG 模式但缺少 RAG 特有字段（已降级为 LLM Judge） -->
+    <div v-if="analysis.eval_mode === 'rag_hybrid' && data.vector_similarity == null && !hasDimensions && data.overall_score != null" class="detail-section rag-fallback-notice">
+      <p>⚠️ 该题目缺少参考答案，已降级为通用评估模式。评分基于回答的完整性、清晰度和技术深度。</p>
     </div>
 
     <!-- 评语 -->
@@ -89,10 +94,12 @@ const scoreColorClass = computed(() => {
   return 'score-low'
 })
 
-const hasDimensions = computed(() =>
-  (data.value.accuracy_score || data.value.completeness_score ||
-   data.value.clarity_score || data.value.technical_depth_score) != null
-)
+const hasDimensions = computed(() => {
+  const d = data.value
+  const scores = [d.accuracy_score, d.completeness_score, d.clarity_score, d.technical_depth_score]
+  // 至少有一个维度分数 > 0 才展示（过滤掉旧 RAG 数据中的全零占位）
+  return scores.some(s => typeof s === 'number' && s > 0)
+})
 
 const dimensions = computed(() => [
   { key: 'accuracy', label: '真实性', score: data.value.accuracy_score ?? 0, reasoning: data.value.accuracy_reasoning },
@@ -174,4 +181,12 @@ h3 { font-size: 17px; margin-bottom: 16px; }
 .sim-bar { flex: 1; height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden; }
 .sim-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, #6366f1, #a78bfa); transition: width 0.4s; }
 .sim-value { font-size: 13px; font-weight: 600; color: #6366f1; }
+
+.rag-fallback-notice {
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+.rag-fallback-notice p { font-size: 13px; color: #92400e; margin: 0; }
 </style>

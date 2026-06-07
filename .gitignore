@@ -1,5 +1,5 @@
 # AI Coding
-.claude/
+*.claude
 prompt.txt
 api/
 
@@ -25,7 +25,7 @@ redis_data/
 minio_data/
 
 # Documentation
-docs/
+
 
 # IDE
 .idea/

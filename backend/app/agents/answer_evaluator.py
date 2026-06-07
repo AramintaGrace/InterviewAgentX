@@ -178,19 +178,22 @@ class AnswerEvaluatorAgent(BaseAgent):
 
         # --- Normal path: clean JSON was parsed ---
         analysis.setdefault("eval_mode", self.eval_mode)
-        accuracy = analysis.pop("accuracy", {})
-        completeness = analysis.pop("completeness", {})
-        clarity = analysis.pop("clarity", {})
-        technical_depth = analysis.pop("technical_depth", {})
 
-        analysis["accuracy_score"] = accuracy.get("score", 0) if isinstance(accuracy, dict) else 0
-        analysis["accuracy_reasoning"] = accuracy.get("reasoning", "") if isinstance(accuracy, dict) else ""
-        analysis["completeness_score"] = completeness.get("score", 0) if isinstance(completeness, dict) else 0
-        analysis["completeness_reasoning"] = completeness.get("reasoning", "") if isinstance(completeness, dict) else ""
-        analysis["clarity_score"] = clarity.get("score", 0) if isinstance(clarity, dict) else 0
-        analysis["clarity_reasoning"] = clarity.get("reasoning", "") if isinstance(clarity, dict) else ""
-        analysis["technical_depth_score"] = technical_depth.get("score", 0) if isinstance(technical_depth, dict) else 0
-        analysis["technical_depth_reasoning"] = technical_depth.get("reasoning", "") if isinstance(technical_depth, dict) else ""
+        # 仅 LLM Judge 模式扁平化四维评分；RAG 模式不需要这些字段
+        if self.eval_mode == "llm_judge":
+            accuracy = analysis.pop("accuracy", {})
+            completeness = analysis.pop("completeness", {})
+            clarity = analysis.pop("clarity", {})
+            technical_depth = analysis.pop("technical_depth", {})
+
+            analysis["accuracy_score"] = accuracy.get("score", 0) if isinstance(accuracy, dict) else 0
+            analysis["accuracy_reasoning"] = accuracy.get("reasoning", "") if isinstance(accuracy, dict) else ""
+            analysis["completeness_score"] = completeness.get("score", 0) if isinstance(completeness, dict) else 0
+            analysis["completeness_reasoning"] = completeness.get("reasoning", "") if isinstance(completeness, dict) else ""
+            analysis["clarity_score"] = clarity.get("score", 0) if isinstance(clarity, dict) else 0
+            analysis["clarity_reasoning"] = clarity.get("reasoning", "") if isinstance(clarity, dict) else ""
+            analysis["technical_depth_score"] = technical_depth.get("score", 0) if isinstance(technical_depth, dict) else 0
+            analysis["technical_depth_reasoning"] = technical_depth.get("reasoning", "") if isinstance(technical_depth, dict) else ""
 
         logger.info(
             f"AnswerEvaluator({self.eval_mode}): "
